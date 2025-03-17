@@ -1,0 +1,183 @@
+﻿@layout MainLayout
+@page "/"
+@using PWT_project.Client.Models
+@using PWT_project.Client.Services
+@inject VareBeholdningService VareBeholdningService
+
+<h3>Varer & Beholdning</h3>
+
+
+<div class="mb-3">
+    @* Search *@
+    <input @bind="searchQuery" @bind:event="oninput" placeholder="Search..." class="form-control" />
+    @* Filters *@
+    <div class="mb-3 mt-3">
+        <select @bind="selectedColor">
+            <option value="">-- Select Color --</option>
+            @foreach (var color in distinctColors)
+            {
+                <option value="@color">@color</option>
+            }
+        </select>
+        <select @bind="selectedSize">
+            <option value="">-- Select Size --</option>
+            @foreach (var size in distinctSizes)
+            {
+                <option value="@size">@size</option>
+            }
+        </select>
+        <select @bind="selectedLength">
+            <option value="">-- Select Length --</option>
+            @foreach (var length in distinctLengths)
+            {
+                <option value="@length">@length</option>
+            }
+        </select>
+    </div>
+    <div>
+        <label>Show Only Items In Stock</label>
+        <input type="checkbox" @bind="onlyInStock" />
+    </div>
+    <div class="mb-3">
+        <label>Min Price</label>
+        <input type="number" @bind="minPrice" @bind:event="oninput" />
+
+        <label>Max Price</label>
+        <input type="number" @bind="maxPrice" @bind:event="oninput" />
+    </div>
+</div>
+
+@if (filteredItems == null)
+{
+    <p>Loading data...</p>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>EAN</th>
+                <th>StyleNo</th>
+                <th>Description</th>
+                <th>Color</th>
+                <th>Inventory</th>
+                <th>Name</th>
+                <th>Size</th>
+                <th>Length</th>
+                <th>Price</th>
+                <th>Suggested Retal Price</th>
+                <th>Shop ID</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in filteredItems)
+            {
+                <tr>
+                    <td>@item.EAN</td>
+                    <td>@item.StyleNo</td>
+                    <td>@item.ItemDescription</td>
+                    <td>@item.ColorCodeName</td>
+                    <td>@item.InventoryQuantity</td>
+                    <td>@item.ItemGroupName</td>
+                    <td>@item.Size</td>
+                    <td>@item.Length</td>
+                    <td>@item.CostPrice</td>
+                    <td>@item.SuggestedRetailPrice</td>
+                    <td>@item.ShopId</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private string searchQuery = "";
+    private string selectedColor = "";
+    private string selectedSize = "";
+    private string selectedLength = "";
+    private bool onlyInStock;
+    private decimal? maxPrice;
+    private decimal? minPrice;
+
+    private List<VareBeholdningDto> allItems;
+    private List<string> distinctColors = new();
+    private List<string> distinctSizes = new();
+    private List<string> distinctLengths = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        allItems = await VareBeholdningService.GetAllAsync();
+
+        // Color
+        distinctColors = allItems
+            .Where(x => !string.IsNullOrEmpty(x.ColorCodeName))
+            .Select(x => x.ColorCodeName)
+            .Distinct()
+            .OrderBy(c => c)
+            .ToList();
+
+        // Size
+        distinctSizes = allItems
+            .Where(x => !string.IsNullOrEmpty(x.Size))
+            .Select(x => x.Size)
+            .Distinct()
+            .OrderBy(s => s)
+            .ToList();
+
+        // Length
+        distinctLengths = allItems
+            .Where(x => !string.IsNullOrEmpty(x.Length))
+            .Select(x => x.Length)
+            .Distinct()
+            .OrderBy(l => l)
+            .ToList();
+    }
+
+    private IEnumerable<VareBeholdningDto> filteredItems
+    {
+        get
+        {
+            if (allItems == null) return null;
+
+            var query = allItems.AsEnumerable();
+
+            // Search
+            if (!string.IsNullOrEmpty(searchQuery))
+            {
+                query = query.Where(x =>
+                    (x.ItemDescription?.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || (x.StyleNo?.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || (x.EAN?.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || (x.ItemGroupName?.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ?? false)
+                );
+            }
+
+            // Filter
+            // Color
+            if (!string.IsNullOrEmpty(selectedColor))
+                query = query.Where(x => x.ColorCodeName == selectedColor);
+
+            // Size
+            if (!string.IsNullOrEmpty(selectedSize))
+                query = query.Where(x => x.Size == selectedSize);
+
+            // Length
+            if (!string.IsNullOrEmpty(selectedLength))
+                query = query.Where(x => x.Length == selectedLength);
+
+            // In Stock
+            if (onlyInStock == true)
+                query = query.Where(x => x.InventoryQuantity > 0);
+
+            // MaxPrice
+            if (maxPrice.HasValue)
+                query = query.Where(x => x.SuggestedRetailPrice <= maxPrice );
+
+            // MinPrice
+            if (minPrice.HasValue)
+                query = query.Where(x => x.SuggestedRetailPrice >= minPrice);
+
+            return query;
+        }
+    }
+}
